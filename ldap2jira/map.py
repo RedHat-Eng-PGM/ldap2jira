@@ -1,8 +1,9 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
+# TODO: Waiting for py39
+from typing import List
 
 from jira import JIRA
-
 from ldap2jira.ldap_lookup import LDAPLookup
 
 
@@ -16,10 +17,10 @@ class LDAP2JiraUserMap:
                  jira_password: str,
                  ldap_url: str,
                  ldap_base: str,
-                 ldap_query_fields_username: list[str],
-                 ldap_fields_username: list[str],
-                 ldap_fields_mail: list[str],
-                 ldap_fields_jira_search: list[str],
+                 ldap_query_fields_username: List[str],
+                 ldap_fields_username: List[str],
+                 ldap_fields_mail: List[str],
+                 ldap_fields_jira_search: List[str],
                  email_domain: str,
                  ):
         self.jira_url = jira_url
@@ -55,16 +56,21 @@ class LDAP2JiraUserMap:
         return self._jira
 
     def ldap_query(self, query: str):
-        return self.ldap.query(query,
-                               query_fields=self.ldap_query_fields_username,
-                               return_fields=self.ldap_fields_username + self.ldap_fields_mail
-                               )
+        return self.ldap.query(
+            query,
+            query_fields=self.ldap_query_fields_username,
+            return_fields=self.ldap_fields_username + self.ldap_fields_mail
+        )
 
     def jira_search_user(self, query: str):
         log.info(f'Jira search for: {query}')
         return self.jira.search_users(query, maxResults=10)
 
-    def ldap_jira_match(self, ldap_account: dict, jira_account) -> bool:
+    def ldap_jira_match(self,
+                        ldap_account: dict,
+                        jira_account: object
+                        ) -> bool:
+
         jira_username = jira_account.key
         jira_email = jira_account.emailAddress
 
@@ -86,12 +92,17 @@ class LDAP2JiraUserMap:
 
     def process_username(self, username: str) -> dict:
 
-        def update_and_log_user(
-                username: str, status: str,  log_extra: str = '', level=logging.WARNING):
+        def update_and_log_user(username: str,
+                                status: str,
+                                log_extra: str = '',
+                                level=logging.WARNING
+                                ):
 
             user_dict['status'] = status
 
-            log_msg = f"JIRA account - {status.replace('_', ' ').capitalize()}: {username}\n"
+            log_msg = (
+                "JIRA account - "
+                f"{status.replace('_', ' ').capitalize()}: {username}\n")
             log_msg += log_extra + '\n' if log_extra else ''
             log.log(level, log_msg)
 
@@ -116,14 +127,16 @@ class LDAP2JiraUserMap:
 
         ldap_account = ldap_results[0]
 
-        # Try to look for jira account based on various ldap fields by preference
+        # Look for jira account based on various ldap fields by preference
         jira_accounts = []
         searched_values = set()
 
         for field in self.ldap_fields_jira_search:
-            if (field not in ldap_account
-                    or not ldap_account[field]
-                    or ldap_account[field] in searched_values):
+            if (
+                field not in ldap_account
+                or not ldap_account[field]
+                or ldap_account[field] in searched_values
+            ):
                 continue
 
             searched_values.add(ldap_account[field])
@@ -139,7 +152,8 @@ class LDAP2JiraUserMap:
                     user_dict['jira-account'] = jira_account.key
                     break
 
-            if 'jira-account' in user_dict:  # Don't search value from rest of ldap fields
+            # Don't search value from rest of ldap fields
+            if 'jira-account' in user_dict:
                 break
 
         if not jira_accounts:
@@ -150,12 +164,13 @@ class LDAP2JiraUserMap:
             user_dict['jira-results'] = [
                 jira_account.key for jira_account in jira_accounts]
 
-            update_and_log_user(username, 'ambiguous',
-                                'Possible matches: ' + ','.join(user_dict['jira-results']))
+            update_and_log_user(
+                username, 'ambiguous',
+                'Possible matches: ' + ','.join(user_dict['jira-results']))
 
         return user_dict
 
-    def find_jira_accounts(self, usernames: list[str]) -> dict:
+    def find_jira_accounts(self, usernames: List[str]) -> dict:
         users = {}
 
         with ThreadPoolExecutor(thread_name_prefix='W') as executor:

@@ -1,3 +1,6 @@
+# TODO: Waiting for py39
+from typing import List
+
 import ldap
 
 
@@ -6,8 +9,8 @@ class LDAPQueryNotFoundError(Exception):
 
 
 class LDAPLookup:
-    DEFAULT_QUERY_FIELDS: list[str] = ['uid']
-    DEFAULT_RETURN_FIELDS: list[str] = ['uid', 'cn', 'mail']
+    DEFAULT_QUERY_FIELDS: List[str] = ['uid']
+    DEFAULT_RETURN_FIELDS: List[str] = ['uid', 'cn', 'mail']
 
     def __init__(self, ldap_url: str, ldap_base: str):
         self.ldap_client = ldap.initialize(ldap_url)
@@ -17,10 +20,10 @@ class LDAPLookup:
         self.ldap_client.set_option(ldap.OPT_REFERRALS, 0)
 
     def query(self, query: str,
-              query_fields: list[str] = None,
-              return_fields: list[str] = None,
+              query_fields: List[str] = None,
+              return_fields: List[str] = None,
               raise_exception: bool = False,
-              ) -> list[dict]:
+              ) -> List[dict]:
 
         query = query.rstrip('*')
 
@@ -34,7 +37,8 @@ class LDAPLookup:
             query_string = f'{query_fields[0]}={query}'
         else:
             # Example: (|(cn=query*)(sn=query*)(mail=query*))
-            field_queries = [f'({field}={query}*)' for field in query_fields if field]
+            field_queries = [f'({field}={query}*)'
+                             for field in query_fields if field]
             query_string = '(|%s)' % ''.join(field_queries)
 
         res = self.ldap_client.search_s(
@@ -44,4 +48,5 @@ class LDAPLookup:
             raise LDAPQueryNotFoundError(f'Query not found in LDAP: {query}')
 
         # Extract first values, convert from bytes
-        return [{k: v[0].decode('utf-8') for k, v in record[1].items()} for record in res]
+        return [{k: v[0].decode('utf-8')
+                 for k, v in record[1].items()} for record in res]

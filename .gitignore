@@ -12,6 +12,7 @@ MANIFEST
 
 .buildpath
 .cache
+.coverage
 .eggs
 *.egg-info
 .project
@@ -19,5 +20,6 @@ MANIFEST
 .refactorings
 .settings
 .ipynb*
+.tox
 
 version.py
