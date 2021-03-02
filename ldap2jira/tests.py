@@ -1,11 +1,16 @@
+from collections import namedtuple
 from copy import deepcopy
 import unittest
-from unittest.mock import patch, ANY
+from unittest.mock import patch, ANY, MagicMock
 
 from ldap2jira.ldap_lookup import LDAPLookup, LDAPQueryNotFoundError
+from ldap2jira.map import LDAP2JiraUserMap
 
 
-class LDAPTestCase(unittest.TestCase):
+class LdapMockTestCaseBase(unittest.TestCase):
+
+    ldap_url = 'ldap://localhost'
+    ldap_base = 'ou=users'
 
     ldap_mock_results = [
         (
@@ -21,34 +26,32 @@ class LDAPTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.ldap_url = 'ldap://localhost'
-        cls.ldap_base = 'ou=users'
         cls.ldap = LDAPLookup(cls.ldap_url, cls.ldap_base)
 
-    def setUp(self):
-        super().setUp()
+
+@patch('ldap.ldapobject.LDAPObject.search_s')
+class LDAPTestCase(LdapMockTestCaseBase):
 
     def assert_mock_called(self, mock, query, return_fields=ANY):
         return mock.assert_called_once_with(
             self.ldap_base, ANY, query, return_fields)
 
-    @patch('ldap.ldapobject.LDAPObject.search_s', return_value=[])
     def test_ldap_no_result(self, mock):
         query = 'nonexistent'
+        mock.return_value = []
 
         self.assertEqual(self.ldap.query(query), [])
         self.assert_mock_called(mock, f'uid={query}')
 
-    @patch('ldap.ldapobject.LDAPObject.search_s', return_value=[])
     def test_ldap_no_result_exception(self, mock):
         query = 'nonexistent'
+        mock.return_value = []
 
         with self.assertRaises(LDAPQueryNotFoundError):
             self.ldap.query(query, raise_exception=True)
 
         self.assert_mock_called(mock, f'uid={query}')
 
-    @patch('ldap.ldapobject.LDAPObject.search_s')
     def test_ldap_single_result(self, mock):
         query = 'us1'
         mock.return_value = [self.ldap_mock_results[0]]
@@ -59,7 +62,6 @@ class LDAPTestCase(unittest.TestCase):
         )
         self.assert_mock_called(mock, f'uid={query}')
 
-    @patch('ldap.ldapobject.LDAPObject.search_s')
     def test_ldap_multiple_results(self, mock):
         query = 'us'
         mock.return_value = self.ldap_mock_results
@@ -71,7 +73,6 @@ class LDAPTestCase(unittest.TestCase):
         ])
         self.assert_mock_called(mock, f'(|(uid={query}*)(cn={query}*))')
 
-    @patch('ldap.ldapobject.LDAPObject.search_s')
     def test_ldap_return_fields(self, mock):
         query = 'us'
         return_fields = ['uid', 'cn']
@@ -88,3 +89,105 @@ class LDAPTestCase(unittest.TestCase):
         ])
         self.assert_mock_called(
             mock, f'uid={query}', return_fields)
+
+
+@patch('ldap.ldapobject.LDAPObject.search_s')
+class LDAP2JiraTestCase(LdapMockTestCaseBase):
+    jira_account_mock = namedtuple('JiraAccount', ['key', 'emailAddress'])
+
+    jira_accounts_mock = [
+        jira_account_mock('us1', 'us1@nottest.org'),
+        jira_account_mock('us2', 'us2@test.org'),
+        jira_account_mock('us3', 'us3@test.org'),
+    ]
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.map = LDAP2JiraUserMap(
+            jira_url='https://test.org',
+            jira_user='test',
+            jira_password='test',
+            ldap_url=cls.ldap_url,
+            ldap_base=cls.ldap_base,
+            ldap_query_fields_username=['uid'],
+            ldap_fields_username=['uid'],
+            ldap_fields_mail=['mail'],
+            ldap_fields_jira_search=[
+                'mail', 'uid'],
+            email_domain='test.org'
+            )
+
+        cls.map._jira = MagicMock()
+
+    def setUp(self):
+        super().setUp()
+        self.map._jira.search_users = MagicMock()
+        self.mock_jira_search = self.map._jira.search_users
+
+    def test_jira_match(self, mock_ldap):
+        mock_ldap.return_value = [self.ldap_mock_results[1]]
+        self.mock_jira_search.return_value = [self.jira_accounts_mock[1]]
+
+        self.assertDictEqual(
+            self.map.find_jira_accounts(['us2']),
+            {'us2': {'jira-account': 'us2', 'status': 'found'}}
+        )
+
+    def test_jira_ambiguous(self, mock_ldap):
+        mock_ldap.return_value = [self.ldap_mock_results[1]]
+        self.mock_jira_search.return_value = [self.jira_accounts_mock[0],
+                                              self.jira_accounts_mock[2]]
+
+        with self.assertLogs('ldap2jira.map', level='WARNING'):
+
+            self.assertDictEqual(
+                self.map.find_jira_accounts(['us2']),
+                {'us2': {'jira-results': ['us1', 'us3'],
+                         'status': 'ambiguous'}}
+            )
+
+    def test_jira_not_in_ldap(self, mock_ldap):
+        mock_ldap.return_value = []
+
+        with self.assertLogs('ldap2jira.map', level='WARNING'):
+
+            self.assertDictEqual(
+                self.map.find_jira_accounts(['us2']),
+                {'us2': {'status': 'not_in_ldap'}}
+            )
+
+    def test_jira_missing(self, mock_ldap):
+        mock_ldap.return_value = [self.ldap_mock_results[1]]
+
+        with self.assertLogs('ldap2jira.map', level='WARNING'):
+
+            self.assertDictEqual(
+                self.map.find_jira_accounts(['us2']),
+                {'us2': {'status': 'missing'}}
+            )
+
+    def test_jira_epmty_username(self, mock_ldap):
+        self.assertDictEqual(self.map.find_jira_accounts(['']), {})
+
+    def test_jira_multiple_ldap(self, mock_ldap):
+        mock_ldap.return_value = self.ldap_mock_results
+
+        with self.assertLogs('ldap2jira.map', level='WARNING'):
+
+            self.assertDictEqual(
+                self.map.find_jira_accounts(['us2']),
+                {'us2': {'status': 'missing'}}
+            )
+
+    def test_skip_invalid_ldap_field(self, mock_ldap):
+        mock_ldap.return_value = [self.ldap_mock_results[1]]
+
+        self.map.ldap_fields_jira_search = ['wrongfield', 'mail', 'uid']
+
+        with self.assertLogs('ldap2jira.map', level='WARNING'):
+
+            self.assertDictEqual(
+                self.map.find_jira_accounts(['us2']),
+                {'us2': {'status': 'missing'}}
+            )

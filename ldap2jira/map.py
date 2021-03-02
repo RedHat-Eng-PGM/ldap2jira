@@ -1,12 +1,12 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
-# TODO: Waiting for py39
-from typing import List
 
 from jira import JIRA
 from ldap2jira.ldap_lookup import LDAPLookup
+from typing import List
 
 
+# TODO: Waiting for py39
 log = logging.getLogger('ldap2jira.map')
 
 
@@ -50,7 +50,7 @@ class LDAP2JiraUserMap:
 
     @property
     def jira(self) -> JIRA:
-        if not self._jira:
+        if not self._jira:  # pragma: no cover
             self._jira = JIRA(basic_auth=(self.jira_user, self.jira_password),
                               options=dict(server=self.jira_url))
         return self._jira
@@ -63,7 +63,7 @@ class LDAP2JiraUserMap:
         )
 
     def jira_search_user(self, query: str):
-        log.info(f'Jira search for: {query}')
+        log.info('Jira search for: %s', query)
         return self.jira.search_users(query, maxResults=10)
 
     def ldap_jira_match(self,
@@ -111,7 +111,7 @@ class LDAP2JiraUserMap:
         if not username:
             return user_dict
 
-        log.info(f'Process username: {username}')
+        log.info('Process username: %s', username)
 
         ldap_results = self.ldap_query(username)
 
@@ -122,24 +122,21 @@ class LDAP2JiraUserMap:
         elif len(ldap_results) > 1:
             # Shouldn't happen when searching unique ldap field for match
             update_and_log_user(username, 'missing')
-            log.error(f'Multiple LDAP records for uid {username}')
+            log.error('Multiple LDAP records for uid %s', username)
             return user_dict
 
         ldap_account = ldap_results[0]
 
         # Look for jira account based on various ldap fields by preference
         jira_accounts = []
-        searched_values = set()
 
         for field in self.ldap_fields_jira_search:
             if (
                 field not in ldap_account
                 or not ldap_account[field]
-                or ldap_account[field] in searched_values
             ):
+                log.debug('Field %s not in LDAP results', field)
                 continue
-
-            searched_values.add(ldap_account[field])
 
             for jira_account in self.jira_search_user(ldap_account[field]):
                 if jira_account in jira_accounts:
@@ -190,4 +187,4 @@ class LDAP2JiraUserMap:
 
     def load_map_from_file(self, filename: str):
         # TODO: Ability to load map for certain ldap users from csv file
-        pass
+        pass  # pragma: no cover
