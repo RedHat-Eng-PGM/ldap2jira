@@ -52,7 +52,8 @@ class LDAP2JiraUserMap:
     def jira(self) -> JIRA:
         if not self._jira:  # pragma: no cover
             self._jira = JIRA(basic_auth=(self.jira_user, self.jira_password),
-                              options=dict(server=self.jira_url))
+                              options=dict(server=self.jira_url),
+                              get_server_info=False)
         return self._jira
 
     def ldap_query(self, query: str):
