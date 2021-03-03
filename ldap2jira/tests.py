@@ -191,3 +191,14 @@ class LDAP2JiraTestCase(LdapMockTestCaseBase):
                 self.map.find_jira_accounts(['us2']),
                 {'us2': {'status': 'missing'}}
             )
+
+    def test_wrong_email(self, mock_ldap):
+        mock_ldap.return_value = [self.ldap_mock_results[0]]
+        self.mock_jira_search.return_value = [self.jira_accounts_mock[0]]
+
+        with self.assertLogs('ldap2jira.map', level='WARNING'):
+
+            self.assertDictEqual(
+                self.map.find_jira_accounts(['us1']),
+                {'us1': {'jira-results': ['us1'], 'status': 'ambiguous'}}
+            )
