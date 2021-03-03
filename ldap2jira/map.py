@@ -1,16 +1,45 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
+# TODO: Waiting for py39
+from typing import List
 
 from jira import JIRA
 from ldap2jira.ldap_lookup import LDAPLookup
-from typing import List
 
 
-# TODO: Waiting for py39
 log = logging.getLogger('ldap2jira.map')
 
 
 class LDAP2JiraUserMap:
+    """ Finds matching JIRA accounts for given user names
+
+    Checks whether user name has LDAP record.
+    Gets user names and email alternatives from LDAP.
+    Looks for matching accounts in JIRA.
+
+    Args:
+        jira_url:
+            JIRA server url ('https://issues.domain.org')
+        jira_user:
+            JIRA user to use for querying
+        jira_password:
+            JIRA user password to use for querying
+        ldap_url:
+            LDAP server host ('ldap://ldaphost')
+        ldap_base:
+            LDAP base for queries ('ou=users,dc=dep,dc=org')
+        ldap_query_fields_username:
+            Which LDAP fields to search given user name in
+        ldap_fields_username:
+            LDAP fields to match against JIRA user name
+        ldap_fields_mail:
+            LDAP fields to match against JIRA user email
+        ldap_fields_jira_search:
+            Run JIRA search against those field values from LDAP
+        email_domain:
+            JIRA user email domain to match
+    """
+
     def __init__(self,
                  jira_url: str,
                  jira_user: str,
@@ -23,6 +52,7 @@ class LDAP2JiraUserMap:
                  ldap_fields_jira_search: List[str],
                  email_domain: str,
                  ):
+
         self.jira_url = jira_url
         self.jira_user = jira_user
         self.jira_password = jira_password
@@ -169,6 +199,44 @@ class LDAP2JiraUserMap:
         return user_dict
 
     def find_jira_accounts(self, usernames: List[str]) -> dict:
+        """ Finds matching JIRA account for given user names
+
+        Args:
+            usernames: List of user names
+
+        Returns:
+            A dict with user names as keys and match results dict as values
+
+            Possible match result keys:
+                status:
+                    found: Found good match in JIRA
+
+                    missing: No match found in JIRA
+
+                    ambiguous: No good match, possible matches in jira-results
+
+                    not_in_ldap: User name wasn't found in LDAP
+
+                jira-account: JIRA user key
+
+                jira-results: A list of JIRA user keys that partially match
+
+            Example:
+
+            {
+                'us1': {'jira-results': ['us1'], 'status': 'ambiguous'},
+
+                'us2': {'status': 'missing'},
+
+                'us3': {'status': 'not_in_ldap'},
+
+                'us4': {'jira-results': ['us1', 'us3'],
+                        'status': 'ambiguous'},
+
+                'us5': {'jira-account': 'us5', 'status': 'found'}
+
+            }
+        """
         users = {}
 
         with ThreadPoolExecutor(thread_name_prefix='W') as executor:

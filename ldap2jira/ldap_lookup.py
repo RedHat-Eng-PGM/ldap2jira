@@ -9,6 +9,13 @@ class LDAPQueryNotFoundError(Exception):
 
 
 class LDAPLookup:
+    """ Wraps ldap library query
+
+    Args:
+        ldap_url: LDAP server in the form of 'ldap://ldaphost'
+        ldap_base: LDAP base for search ('ou=users,dc=department,dc=org')
+    """
+
     DEFAULT_QUERY_FIELDS: List[str] = ['uid']
     DEFAULT_RETURN_FIELDS: List[str] = ['uid', 'cn', 'mail']
 
@@ -24,6 +31,29 @@ class LDAPLookup:
               return_fields: List[str] = None,
               raise_exception: bool = False,
               ) -> List[dict]:
+        """ Perform LDAP query
+
+        Args:
+            query: String to search
+            query_fields: Which LDAP fields to search in
+            return_fields: What LDAP fields to return
+            raise_exception: If True - raise exception if no results
+
+        Returns:
+            List if dicts with LDAP results
+
+            Example:
+
+            [
+                {'uid': 'us1', 'cn': 'user 1', 'mail': 'us1@org.com'},
+
+                {'uid': 'us2', 'cn': 'user 2', 'mail': 'us2@org.com'}
+
+            ]
+
+        Raises:
+            LDAPQueryNotFoundError: No result while raise_exception True
+        """
 
         query = query.rstrip('*')
 
