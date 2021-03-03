@@ -42,7 +42,6 @@ class LDAPTestCase(LdapMockTestCaseBase):
 
         self.assertEqual(self.ldap.query(query), [])
         self.assert_mock_called(mock, f'uid={query}')
-        self.assertTrue(False)  # Breaking intentionally
 
     def test_ldap_no_result_exception(self, mock):
         query = 'nonexistent'
