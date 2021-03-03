@@ -45,6 +45,7 @@ jobs:
         
     - name: Generate coverage xml
       run: |
+        python -m pip install coverage
         coverage xml
       if: github.ref == 'refs/heads/master'
 
