@@ -1,10 +1,9 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
-# TODO: Waiting for py39
-from typing import List
 
 from jira import JIRA
 from ldap2jira.ldap_lookup import LDAPLookup
+from typing import List  # < python 3.9
 
 
 log = logging.getLogger('ldap2jira.map')
