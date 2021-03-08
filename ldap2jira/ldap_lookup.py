@@ -18,11 +18,20 @@ class LDAPLookup:
     DEFAULT_RETURN_FIELDS: List[str] = ['uid', 'cn', 'mail']
 
     def __init__(self, ldap_url: str, ldap_base: str):
-        self.ldap_client = ldap.initialize(ldap_url)
+        self.ldap_url = ldap_url
         self.ldap_base = ldap_base
 
-        self.ldap_client.set_option(ldap.OPT_PROTOCOL_VERSION, 3)
-        self.ldap_client.set_option(ldap.OPT_REFERRALS, 0)
+        self._ldap_client = None  # lazy client init
+
+    @property
+    def ldap_client(self):
+        if not self._ldap_client:
+            self._ldap_client = ldap.initialize(self.ldap_url)
+
+            self._ldap_client.set_option(ldap.OPT_PROTOCOL_VERSION, 3)
+            self._ldap_client.set_option(ldap.OPT_REFERRALS, 0)
+
+        return self._ldap_client
 
     def query(self, query: str,
               query_fields: List[str] = None,
