@@ -1,5 +1,3 @@
-from urllib.parse import urlsplit, urlunsplit
-
 import ldap
 from typing import List  # < python 3.9
 
@@ -20,11 +18,6 @@ class LDAPLookup:
     DEFAULT_RETURN_FIELDS: List[str] = ['uid', 'cn', 'mail']
 
     def __init__(self, ldap_url: str, ldap_base: str):
-        if ldap_url:
-            ldap_url_split = urlsplit(ldap_url)
-            ldap_url_split._replace(scheme='ldap')
-            ldap_url = urlunsplit(ldap_url_split)
-
         self.ldap_client = ldap.initialize(ldap_url)
         self.ldap_base = ldap_base
 
