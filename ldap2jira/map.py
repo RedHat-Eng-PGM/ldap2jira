@@ -104,21 +104,28 @@ class LDAP2JiraUserMap:
         jira_username = jira_account.key
         jira_email = jira_account.emailAddress
 
-        if not jira_email.endswith(f'@{self.email_domain}'):
-            return False
+        log.debug('Trying JIRA account: %s [%s] %s',
+                  jira_account.displayName, jira_username, jira_email)
 
-        ldap_emails = {ldap_account[f]
-                       for f in self.ldap_fields_mail
-                       if f in ldap_account}
+        if jira_email.endswith(f'@{self.email_domain}'):
 
-        ldap_usernames = {ldap_account[f]
-                          for f in self.ldap_fields_username
-                          if f in ldap_account}
+            ldap_emails = {ldap_account[f]
+                           for f in self.ldap_fields_mail
+                           if f in ldap_account}
 
-        email_match = jira_email in ldap_emails
-        username_match = jira_username in ldap_usernames
+            ldap_usernames = {ldap_account[f]
+                              for f in self.ldap_fields_username
+                              if f in ldap_account}
 
-        return email_match or username_match
+            email_match = jira_email in ldap_emails
+            username_match = jira_username in ldap_usernames
+
+            if email_match or username_match:
+                log.debug('Match')
+                return True
+
+        log.debug('No Match')
+        return False
 
     def process_username(self, username: str) -> dict:
 
@@ -157,9 +164,8 @@ class LDAP2JiraUserMap:
 
         ldap_account = ldap_results[0]
 
-        # Look for jira account based on various ldap fields by preference
-        jira_accounts = []
-
+        # All the values to search JIRA for in order
+        jira_queries = []
         for field in self.ldap_fields_jira_search:
             if (
                 field not in ldap_account
@@ -168,7 +174,15 @@ class LDAP2JiraUserMap:
                 log.debug('Field %s not in LDAP results', field)
                 continue
 
-            for jira_account in self.jira_search_user(ldap_account[field]):
+            if ldap_account[field] not in jira_queries:
+                jira_queries.append(ldap_account[field])
+
+        # Look for jira account based on various ldap fields by preference
+        jira_accounts = []
+
+        for query in jira_queries:
+
+            for jira_account in self.jira_search_user(query):
                 if jira_account in jira_accounts:
                     continue
 
@@ -193,7 +207,7 @@ class LDAP2JiraUserMap:
 
             update_and_log_user(
                 username, 'ambiguous',
-                'Possible matches: ' + ','.join(user_dict['jira-results']))
+                'Possible matches: ' + ', '.join(user_dict['jira-results']))
 
         return user_dict
 

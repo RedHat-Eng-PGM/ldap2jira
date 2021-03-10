@@ -93,12 +93,13 @@ class LDAPTestCase(LdapMockTestCaseBase):
 
 @patch('ldap.ldapobject.LDAPObject.search_s')
 class LDAP2JiraTestCase(LdapMockTestCaseBase):
-    jira_account_mock = namedtuple('JiraAccount', ['key', 'emailAddress'])
+    jira_account_mock = namedtuple('JiraAccount',
+                                   ['key', 'emailAddress', 'displayName'])
 
     jira_accounts_mock = [
-        jira_account_mock('us1', 'us1@nottest.org'),
-        jira_account_mock('us2', 'us2@test.org'),
-        jira_account_mock('us3', 'us3@test.org'),
+        jira_account_mock('us1', 'us1@nottest.org', 'U S1'),
+        jira_account_mock('us2', 'us2@test.org', 'U S2'),
+        jira_account_mock('us3', 'us3@test.org', 'U S3'),
     ]
 
     @classmethod
@@ -184,6 +185,34 @@ class LDAP2JiraTestCase(LdapMockTestCaseBase):
         mock_ldap.return_value = [self.ldap_mock_results[1]]
 
         self.map.ldap_fields_jira_search = ['wrongfield', 'mail', 'uid']
+
+        with self.assertLogs('ldap2jira.map', level='WARNING'):
+
+            self.assertDictEqual(
+                self.map.find_jira_accounts(['us2']),
+                {'us2': {'status': 'missing'}}
+            )
+
+        # Empty LDAP value should also be ignored
+        empty_field_mock = deepcopy(self.ldap_mock_results[1])
+        empty_field_mock[1]['mail'] = [b'']
+        mock_ldap.return_value = [empty_field_mock]
+
+        self.map.ldap_fields_jira_search = ['mail', 'uid']
+
+        with self.assertLogs('ldap2jira.map', level='WARNING'):
+
+            self.assertDictEqual(
+                self.map.find_jira_accounts(['us2']),
+                {'us2': {'status': 'missing'}}
+            )
+
+    def test_skip_same_ldap_field_value(self, mock_ldap):
+        local_mock = deepcopy(self.ldap_mock_results[1])
+        local_mock[1]['mail'] = local_mock[1]['uid']
+        mock_ldap.return_value = [local_mock]
+
+        self.map.ldap_fields_jira_search = ['mail', 'uid']
 
         with self.assertLogs('ldap2jira.map', level='WARNING'):
 
