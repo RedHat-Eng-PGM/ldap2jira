@@ -93,13 +93,13 @@ class LDAPTestCase(LdapMockTestCaseBase):
 
 @patch('ldap.ldapobject.LDAPObject.search_s')
 class LDAP2JiraTestCase(LdapMockTestCaseBase):
-    jira_account_mock = namedtuple('JiraAccount',
-                                   ['key', 'emailAddress', 'displayName'])
+    jira_account_mock = namedtuple(
+        'JiraAccount', ['key', 'emailAddress', 'displayName', 'name'])
 
     jira_accounts_mock = [
-        jira_account_mock('us1', 'us1@nottest.org', 'U S1'),
-        jira_account_mock('us2', 'us2@test.org', 'U S2'),
-        jira_account_mock('us3', 'us3@test.org', 'U S3'),
+        jira_account_mock('us1', 'us1@nottest.org', 'U S1', 'U S1'),
+        jira_account_mock('us2', 'us2@test.org', 'U S2', 'U S2'),
+        jira_account_mock('us3', 'us3@test.org', 'U S3', 'U S3'),
     ]
 
     @classmethod
@@ -114,8 +114,9 @@ class LDAP2JiraTestCase(LdapMockTestCaseBase):
             ldap_query_fields_username=['uid'],
             ldap_fields_username=['uid'],
             ldap_fields_mail=['mail'],
+            ldap_fields_name=['cn'],
             ldap_fields_jira_search=[
-                'mail', 'uid'],
+                'mail', 'uid', 'cn'],
             email_domain='test.org'
             )
 
@@ -144,7 +145,7 @@ class LDAP2JiraTestCase(LdapMockTestCaseBase):
 
             self.assertDictEqual(
                 self.map.find_jira_accounts(['us2']),
-                {'us2': {'jira-results': ['us1', 'us3'],
+                {'us2': {'jira-results': {'us1', 'us3'},
                          'status': 'ambiguous'}}
             )
 
@@ -221,6 +222,21 @@ class LDAP2JiraTestCase(LdapMockTestCaseBase):
                 {'us2': {'status': 'missing'}}
             )
 
+    def test_partial_match(self, mock_ldap):
+        self.mock_jira_search.return_value = [self.jira_accounts_mock[1]]
+
+        local_mock = deepcopy(self.ldap_mock_results[1])
+        local_mock[1]['uid'] = [b'nomatch']
+        local_mock[1]['mail'] = [
+            f'nomatch@{self.map.email_domain}'.encode('utf-8')]
+        local_mock[1]['cn'] = [b'U S2']
+        mock_ldap.return_value = [local_mock]
+
+        self.assertDictEqual(
+            self.map.find_jira_accounts(['us2']),
+            {'us2':  {'jira-account': 'us2', 'status': 'found'}}
+        )
+
     def test_wrong_email(self, mock_ldap):
         mock_ldap.return_value = [self.ldap_mock_results[0]]
         self.mock_jira_search.return_value = [self.jira_accounts_mock[0]]
@@ -229,5 +245,5 @@ class LDAP2JiraTestCase(LdapMockTestCaseBase):
 
             self.assertDictEqual(
                 self.map.find_jira_accounts(['us1']),
-                {'us1': {'jira-results': ['us1'], 'status': 'ambiguous'}}
+                {'us1': {'jira-results': {'us1'}, 'status': 'ambiguous'}}
             )

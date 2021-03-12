@@ -9,6 +9,11 @@ from typing import List  # < python 3.9
 log = logging.getLogger('ldap2jira.map')
 
 
+NO_MATCH = 0
+PARTIAL_MATCH = 1
+MATCH = 2
+
+
 class LDAP2JiraUserMap:
     """ Finds matching JIRA accounts for given user names
 
@@ -30,9 +35,11 @@ class LDAP2JiraUserMap:
         ldap_query_fields_username:
             Which LDAP fields to search given user name in
         ldap_fields_username:
-            LDAP fields to match against JIRA user name
+            LDAP fields to match against JIRA account user name
         ldap_fields_mail:
-            LDAP fields to match against JIRA user email
+            LDAP fields to match against JIRA account email
+        ldap_fields_name:
+            LDAP fields to match against JIRA account name
         ldap_fields_jira_search:
             Run JIRA search against those field values from LDAP
         email_domain:
@@ -48,6 +55,7 @@ class LDAP2JiraUserMap:
                  ldap_query_fields_username: List[str],
                  ldap_fields_username: List[str],
                  ldap_fields_mail: List[str],
+                 ldap_fields_name: List[str],
                  ldap_fields_jira_search: List[str],
                  email_domain: str,
                  ):
@@ -63,6 +71,7 @@ class LDAP2JiraUserMap:
 
         self.ldap_fields_username = ldap_fields_username
         self.ldap_fields_mail = ldap_fields_mail
+        self.ldap_fields_name = ldap_fields_name
         self.ldap_fields_jira_search = ldap_fields_jira_search
 
         self.email_domain = email_domain.lstrip('@')
@@ -86,10 +95,16 @@ class LDAP2JiraUserMap:
         return self._jira
 
     def ldap_query(self, query: str):
+        return_fields = set(
+            self.ldap_fields_username
+            + self.ldap_fields_mail
+            + self.ldap_fields_jira_search
+        )
+
         return self.ldap.query(
             query,
             query_fields=self.ldap_query_fields_username,
-            return_fields=self.ldap_fields_username + self.ldap_fields_mail
+            return_fields=return_fields
         )
 
     def jira_search_user(self, query: str):
@@ -99,10 +114,19 @@ class LDAP2JiraUserMap:
     def ldap_jira_match(self,
                         ldap_account: dict,
                         jira_account: object
-                        ) -> bool:
+                        ) -> int:
+        """ Compare LDAP result with JIRA account
 
+        Args:
+            ldap_account: LDAP result
+            jira_account: JIRA account to compare LDAP with
+
+        Returns:
+            Either MATCH, PARTIAL_MATCH, NO_MATCH
+        """
         jira_username = jira_account.key
         jira_email = jira_account.emailAddress
+        jira_names = {jira_account.name, jira_account.displayName}
 
         log.debug('Trying JIRA account: %s [%s] %s',
                   jira_account.displayName, jira_username, jira_email)
@@ -122,26 +146,36 @@ class LDAP2JiraUserMap:
 
             if email_match or username_match:
                 log.debug('Match')
-                return True
+                return MATCH
+
+            ldap_names = {ldap_account[f]
+                          for f in self.ldap_fields_name
+                          if f in ldap_account}
+
+            if jira_names & ldap_names:
+                log.debug('Partial Match')
+                return PARTIAL_MATCH
 
         log.debug('No Match')
-        return False
+        return NO_MATCH
+
+    def _update_user(self,
+                     user_dict: dict,
+                     username: str,
+                     status: str,
+                     log_extra: str = '',
+                     level=logging.WARNING
+                     ):
+
+        user_dict['status'] = status
+
+        log_msg = (
+            "JIRA account - "
+            f"{status.replace('_', ' ').capitalize()}: {username}\n")
+        log_msg += log_extra + '\n' if log_extra else ''
+        log.log(level, log_msg)
 
     def process_username(self, username: str) -> dict:
-
-        def update_and_log_user(username: str,
-                                status: str,
-                                log_extra: str = '',
-                                level=logging.WARNING
-                                ):
-
-            user_dict['status'] = status
-
-            log_msg = (
-                "JIRA account - "
-                f"{status.replace('_', ' ').capitalize()}: {username}\n")
-            log_msg += log_extra + '\n' if log_extra else ''
-            log.log(level, log_msg)
 
         user_dict = {'username': username}
 
@@ -153,12 +187,12 @@ class LDAP2JiraUserMap:
         ldap_results = self.ldap_query(username)
 
         if not ldap_results:
-            update_and_log_user(username, 'not_in_ldap')
+            self._update_user(user_dict, username, 'not_in_ldap')
             return user_dict
 
         elif len(ldap_results) > 1:
             # Shouldn't happen when searching unique ldap field for match
-            update_and_log_user(username, 'missing')
+            self._update_user(user_dict, username, 'missing')
             log.error('Multiple LDAP records for uid %s', username)
             return user_dict
 
@@ -178,35 +212,53 @@ class LDAP2JiraUserMap:
                 jira_queries.append(ldap_account[field])
 
         # Look for jira account based on various ldap fields by preference
-        jira_accounts = []
+        jira_account_keys = set()
+        partial_single_matches = []  # Need order of preference
 
         for query in jira_queries:
 
-            for jira_account in self.jira_search_user(query):
-                if jira_account in jira_accounts:
+            result_jira_accounts = self.jira_search_user(query)
+            single_result = len(result_jira_accounts) == 1
+            for jira_account in result_jira_accounts:
+                if jira_account.key in jira_account_keys and not single_result:
                     continue
 
-                jira_accounts.append(jira_account)
+                jira_account_keys.add(jira_account.key)
 
-                if self.ldap_jira_match(ldap_account, jira_account):
-                    update_and_log_user(username, 'found', level=logging.INFO)
+                match = self.ldap_jira_match(ldap_account, jira_account)
+                if match == MATCH:
+                    self._update_user(user_dict,
+                                      jira_account.key,
+                                      'found',
+                                      level=logging.INFO)
                     user_dict['jira-account'] = jira_account.key
                     break
+
+                if match == PARTIAL_MATCH and single_result:
+                    if jira_account.key not in partial_single_matches:
+                        partial_single_matches.append(jira_account.key)
 
             # Don't search value from rest of ldap fields
             if 'jira-account' in user_dict:
                 break
 
-        if not jira_accounts:
-            update_and_log_user(username, 'missing')
+        if not jira_account_keys:
+            self._update_user(user_dict, username, 'missing')
             return user_dict
 
-        if 'jira-account' not in user_dict:
-            user_dict['jira-results'] = [
-                jira_account.key for jira_account in jira_accounts]
+        if len(partial_single_matches) == 1:
+            self._update_user(user_dict,
+                              partial_single_matches[0],
+                              'found',
+                              log_extra='Single Partial',
+                              level=logging.INFO)
+            user_dict['jira-account'] = partial_single_matches[0]
 
-            update_and_log_user(
-                username, 'ambiguous',
+        if 'jira-account' not in user_dict:
+            user_dict['jira-results'] = jira_account_keys
+
+            self._update_user(
+                user_dict, username, 'ambiguous',
                 'Possible matches: ' + ', '.join(user_dict['jira-results']))
 
         return user_dict
