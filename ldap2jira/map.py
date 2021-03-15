@@ -1,5 +1,8 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import csv
+import json
 import logging
+import os
 
 from jira import JIRA
 from ldap2jira.ldap_lookup import LDAPLookup
@@ -44,6 +47,24 @@ class LDAP2JiraUserMap:
             Run JIRA search against those field values from LDAP
         email_domain:
             JIRA user email domain to match
+        map_file:
+            json or csv file with user mapping (username -> jira_username)
+
+            csv example:
+
+                us1csv,us1jira
+
+                us2csv,us2jira
+
+            json example:
+                {
+
+                    "us1json": "us1jira",
+
+                    "us2json": "us2jira"
+
+                }
+
     """
 
     def __init__(self,
@@ -58,6 +79,7 @@ class LDAP2JiraUserMap:
                  ldap_fields_name: List[str],
                  ldap_fields_jira_search: List[str],
                  email_domain: str,
+                 map_file: str = None,
                  ):
 
         self.jira_url = jira_url
@@ -79,6 +101,9 @@ class LDAP2JiraUserMap:
         self._ldap = None
         self._jira = None
 
+        self.map_file = map_file
+        self.map = {}
+
     @property
     def ldap(self) -> LDAPLookup:
         if not self._ldap:
@@ -93,6 +118,27 @@ class LDAP2JiraUserMap:
                               options=dict(server=self.jira_url),
                               get_server_info=False)
         return self._jira
+
+    def load_map(self, filename: str = None):
+        if not filename:
+            return {}
+
+        if not os.path.exists(filename):
+            log.warning("Map file doesn't exist: %s", filename)
+            return {}
+
+        file_extension = os.path.splitext(filename)[1]
+        fmap = {}
+
+        with open(filename, 'r') as map_fp:
+            if file_extension == '.json':
+                fmap = json.load(map_fp)
+
+            if file_extension == '.csv':
+                fmap = {val_list[0]: val_list[1]
+                        for val_list in csv.reader(map_fp)}
+
+        return fmap
 
     def ldap_query(self, query: str):
         return_fields = set(
@@ -176,7 +222,6 @@ class LDAP2JiraUserMap:
         log.log(level, log_msg)
 
     def process_username(self, username: str) -> dict:
-
         user_dict = {'username': username}
 
         if not username:
@@ -184,6 +229,17 @@ class LDAP2JiraUserMap:
 
         log.info('Process username: %s', username)
 
+        # Try file map
+        if username in self.map:
+            self._update_user(user_dict,
+                              self.map[username],
+                              'found',
+                              log_extra='File Map',
+                              level=logging.INFO)
+            user_dict['jira-account'] = self.map[username]
+            return user_dict
+
+        # No luck - continue
         ldap_results = self.ldap_query(username)
 
         if not ldap_results:
@@ -304,6 +360,8 @@ class LDAP2JiraUserMap:
         """
         users = {}
 
+        self.map.update(self.load_map(self.map_file))
+
         with ThreadPoolExecutor(thread_name_prefix='W') as executor:
 
             f_users_d = {executor.submit(self.process_username, username)
@@ -318,7 +376,3 @@ class LDAP2JiraUserMap:
                     users[username] = user_d
 
         return users
-
-    def load_map_from_file(self, filename: str):
-        # TODO: Ability to load map for certain ldap users from csv file
-        pass  # pragma: no cover

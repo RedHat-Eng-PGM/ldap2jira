@@ -1,5 +1,6 @@
 from collections import namedtuple
 from copy import deepcopy
+import os
 import unittest
 from unittest.mock import patch, ANY, MagicMock
 
@@ -247,3 +248,37 @@ class LDAP2JiraTestCase(LdapMockTestCaseBase):
                 self.map.find_jira_accounts(['us1']),
                 {'us1': {'jira-results': {'us1'}, 'status': 'ambiguous'}}
             )
+
+    def test_file_map(self, mock_ldap):
+        # Missing file
+        self.map.map_file = os.path.join(os.path.dirname(__file__),
+                                         'notexisting')
+
+        with self.assertLogs('ldap2jira.map', level='WARNING'):
+
+            self.assertDictEqual(
+                self.map.find_jira_accounts(['us1']),
+                {'us1': {'status': 'not_in_ldap'}}
+            )
+
+        # JSON
+        self.map.map_file = os.path.join(os.path.dirname(__file__),
+                                         'test_map.json')
+
+        self.assertDictEqual(
+            self.map.find_jira_accounts(['us1json']),
+            {'us1json': {'jira-account': 'us1jira', 'status': 'found'}}
+        )
+
+        # CSV
+        self.map.map_file = os.path.join(os.path.dirname(__file__),
+                                         'test_map.csv')
+
+        self.assertDictEqual(
+            self.map.find_jira_accounts(['us1csv']),
+            {'us1csv': {'jira-account': 'us1jira', 'status': 'found'}}
+        )
+
+        # Reset shared mapper instance
+        self.map.map_file = None
+        self.map = {}
