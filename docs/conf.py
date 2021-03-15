@@ -55,4 +55,4 @@ html_static_path = ['_static']
 
 
 # -- Extension configuration -------------------------------------------------
-autodoc_mock_imports = ["ldap","jira"]
+autodoc_mock_imports = ['ldap', 'jira']
