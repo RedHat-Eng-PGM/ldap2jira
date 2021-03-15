@@ -1,3 +1,16 @@
+""" LDAP to JIRA User mapping
+
+Package looks for given user names in LDAP.
+Gets configurable fields for user name, email, name.
+Tries to search those in JIRA and find a matching JIRA account.
+
+Optionally consumes user map from file (json, csv).
+
+Usage:
+    * Configure instance
+    * Use LDAP2JiraUserMap.find_jira_accounts method
+"""
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import csv
 import json
@@ -157,10 +170,10 @@ class LDAP2JiraUserMap:
         log.info('Jira search for: %s', query)
         return self.jira.search_users(query, maxResults=10)
 
-    def ldap_jira_match(self,
-                        ldap_account: dict,
-                        jira_account: object
-                        ) -> int:
+    def _ldap_jira_match(self,
+                         ldap_account: dict,
+                         jira_account: object
+                         ) -> int:
         """ Compare LDAP result with JIRA account
 
         Args:
@@ -212,7 +225,7 @@ class LDAP2JiraUserMap:
                      log_extra: str = '',
                      level=logging.WARNING
                      ):
-
+        """ Update common user dict and log result """
         user_dict['status'] = status
 
         log_msg = (
@@ -221,7 +234,11 @@ class LDAP2JiraUserMap:
         log_msg += log_extra + '\n' if log_extra else ''
         log.log(level, log_msg)
 
-    def process_username(self, username: str) -> dict:
+    def _process_username(self, username: str) -> dict:
+        """ Process single username
+
+        Multithreaded worker method
+        """
         user_dict = {'username': username}
 
         if not username:
@@ -281,7 +298,7 @@ class LDAP2JiraUserMap:
 
                 jira_account_keys.add(jira_account.key)
 
-                match = self.ldap_jira_match(ldap_account, jira_account)
+                match = self._ldap_jira_match(ldap_account, jira_account)
                 if match == MATCH:
                     self._update_user(user_dict,
                                       jira_account.key,
@@ -364,7 +381,7 @@ class LDAP2JiraUserMap:
 
         with ThreadPoolExecutor(thread_name_prefix='W') as executor:
 
-            f_users_d = {executor.submit(self.process_username, username)
+            f_users_d = {executor.submit(self._process_username, username)
                          for username in usernames}
 
             for f_user_d in as_completed(f_users_d):

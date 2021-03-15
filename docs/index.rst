@@ -10,10 +10,10 @@ Welcome to ldap2jira's documentation!
    :maxdepth: 2
    :caption: Contents:
 
-.. automodule:: ldap2jira.ldap_lookup
+.. automodule:: ldap2jira.map
    :members:
 
-.. automodule:: ldap2jira.map
+.. automodule:: ldap2jira.ldap_lookup
    :members:
 
 Indices and tables
