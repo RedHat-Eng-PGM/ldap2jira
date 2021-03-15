@@ -16,9 +16,11 @@ https://python-ldap2jira.readthedocs.io/
 
 ## Usage
 Install package from pypi
+
     pip install ldap2jira
 
 In python
+
     from ldap2jira import LDAP2JiraUserMap
     
     l2j = LDAP2JiraUserMap(
