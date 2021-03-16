@@ -1,4 +1,5 @@
 import ldap
+from ldap.ldapobject import ReconnectLDAPObject
 from typing import List  # < python 3.9
 
 
@@ -12,21 +13,34 @@ class LDAPLookup:
     Args:
         ldap_url: LDAP server in the form of 'ldap://ldaphost'
         ldap_base: LDAP base for search ('ou=users,dc=department,dc=org')
+        ldap_retry_max: LDAP number of reconnect attempts
+        ldap_retry_delay: LDAP seconds between reconnect attempts
     """
 
     DEFAULT_QUERY_FIELDS: List[str] = ['uid']
     DEFAULT_RETURN_FIELDS: List[str] = ['uid', 'cn', 'mail']
 
-    def __init__(self, ldap_url: str, ldap_base: str):
+    def __init__(self,
+                 ldap_url: str,
+                 ldap_base: str,
+                 ldap_retry_max: int = 3,
+                 ldap_retry_delay: float = 5.0):
         self.ldap_url = ldap_url
         self.ldap_base = ldap_base
+
+        self.ldap_retry_max = ldap_retry_max
+        self.ldap_retry_delay = ldap_retry_delay
 
         self._ldap_client = None  # lazy client init
 
     @property
     def ldap_client(self):
         if not self._ldap_client:
-            self._ldap_client = ldap.initialize(self.ldap_url)
+            self._ldap_client = ReconnectLDAPObject(
+                self.ldap_url,
+                retry_max=self.ldap_retry_max,
+                retry_delay=self.ldap_retry_delay
+            )
 
             self._ldap_client.set_option(ldap.OPT_PROTOCOL_VERSION, 3)
             self._ldap_client.set_option(ldap.OPT_REFERRALS, 0)
