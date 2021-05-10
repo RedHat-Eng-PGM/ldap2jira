@@ -183,9 +183,14 @@ class LDAP2JiraUserMap:
         Returns:
             Either MATCH, PARTIAL_MATCH, NO_MATCH
         """
-        jira_username = jira_account.key
-        jira_email = jira_account.emailAddress
-        jira_names = {jira_account.name, jira_account.displayName}
+        try:
+            jira_username = jira_account.key
+            jira_email = jira_account.emailAddress
+            jira_names = {jira_account.name, jira_account.displayName}
+
+        except AttributeError as e:
+            log.warning('Unable to get JIRA account values\n%s', e)
+            return NO_MATCH
 
         log.debug('Trying JIRA account: %s [%s] %s',
                   jira_account.displayName, jira_username, jira_email)

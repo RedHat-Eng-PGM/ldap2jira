@@ -249,6 +249,23 @@ class LDAP2JiraTestCase(LdapMockTestCaseBase):
                 {'us1': {'jira-results': {'us1'}, 'status': 'ambiguous'}}
             )
 
+    def test_no_email(self, mock_ldap):
+        mock_ldap.return_value = [self.ldap_mock_results[1]]
+
+        jira_account_mock = namedtuple(
+            'JiraAccount', ['key', 'displayName', 'name'])
+
+        self.mock_jira_search.return_value = [
+            jira_account_mock('us1', 'U S1', 'U S1')
+        ]
+
+        with self.assertLogs('ldap2jira.map', level='WARNING'):
+
+            self.assertDictEqual(
+                self.map.find_jira_accounts(['us1']),
+                {'us1': {'jira-results': {'us1'}, 'status': 'ambiguous'}}
+            )
+
     def test_file_map(self, mock_ldap):
         # Missing file
         self.map.map_file = os.path.join(os.path.dirname(__file__),
