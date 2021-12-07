@@ -44,6 +44,8 @@ class LDAP2JiraUserMap:
             JIRA user to use for querying
         jira_password:
             JIRA user password to use for querying
+        jira_auth_token:
+            JIRA auth token to use for querying
         ldap_url:
             LDAP server host ('ldap://ldaphost')
         ldap_base:
@@ -82,8 +84,6 @@ class LDAP2JiraUserMap:
 
     def __init__(self,
                  jira_url: str,
-                 jira_user: str,
-                 jira_password: str,
                  ldap_url: str,
                  ldap_base: str,
                  ldap_query_fields_username: List[str],
@@ -93,11 +93,21 @@ class LDAP2JiraUserMap:
                  ldap_fields_jira_search: List[str],
                  email_domain: str,
                  map_file: str = None,
+                 jira_user: str = None,
+                 jira_password: str = None,
+                 jira_auth_token: str = None,
                  ):
+
+        if jira_user or jira_password:
+            if not all((jira_user, jira_password)):
+                raise ValueError('JIRA user and password required for basic auth.')
+        elif not jira_auth_token:
+            raise ValueError('JIRA user/password or auth token required.')
 
         self.jira_url = jira_url
         self.jira_user = jira_user
         self.jira_password = jira_password
+        self.jira_auth_token = jira_auth_token
 
         self.ldap_url = ldap_url
         self.ldap_base = ldap_base
@@ -127,9 +137,17 @@ class LDAP2JiraUserMap:
     @property
     def jira(self) -> JIRA:
         if not self._jira:  # pragma: no cover
-            self._jira = JIRA(basic_auth=(self.jira_user, self.jira_password),
-                              options=dict(server=self.jira_url),
-                              get_server_info=False)
+            jira_kwargs = {
+                'options': {'server': self.jira_url},
+                'get_server_info': False,
+            }
+            if self.jira_password:
+                jira_kwargs['basic_auth'] = (self.jira_user, self.jira_password)
+            else:
+                jira_kwargs['token_auth'] = self.jira_auth_token
+
+            self._jira = JIRA(**jira_kwargs)
+
         return self._jira
 
     def load_map(self, filename: str = None):
