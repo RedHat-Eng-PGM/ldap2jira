@@ -95,12 +95,12 @@ class LDAPTestCase(LdapMockTestCaseBase):
 @patch('ldap.ldapobject.LDAPObject.search_s')
 class LDAP2JiraTestCase(LdapMockTestCaseBase):
     jira_account_mock = namedtuple(
-        'JiraAccount', ['key', 'emailAddress', 'displayName', 'name'])
+        'JiraAccount', ['emailAddress', 'displayName', 'name'])
 
     jira_accounts_mock = [
-        jira_account_mock('us1', 'us1@nottest.org', 'U S1', 'U S1'),
-        jira_account_mock('us2', 'us2@test.org', 'U S2', 'U S2'),
-        jira_account_mock('us3', 'us3@test.org', 'U S3', 'U S3'),
+        jira_account_mock('us1@nottest.org', 'U S1', 'us1'),
+        jira_account_mock('us2@test.org', 'U S2', 'us2'),
+        jira_account_mock('us3@test.org', 'U S3', 'us3'),
     ]
 
     @classmethod
@@ -253,10 +253,10 @@ class LDAP2JiraTestCase(LdapMockTestCaseBase):
         mock_ldap.return_value = [self.ldap_mock_results[1]]
 
         jira_account_mock = namedtuple(
-            'JiraAccount', ['key', 'displayName', 'name'])
+            'JiraAccount', ['displayName', 'name'])
 
         self.mock_jira_search.return_value = [
-            jira_account_mock('us1', 'U S1', 'U S1')
+            jira_account_mock('U S1', 'us1')
         ]
 
         with self.assertLogs('ldap2jira.map', level='WARNING'):
