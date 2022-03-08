@@ -202,7 +202,7 @@ class LDAP2JiraUserMap:
             Either MATCH, PARTIAL_MATCH, NO_MATCH
         """
         try:
-            jira_username = jira_account.key
+            jira_username = jira_account.name
             jira_email = jira_account.emailAddress
             jira_names = {jira_account.name, jira_account.displayName}
 
@@ -308,7 +308,7 @@ class LDAP2JiraUserMap:
                 jira_queries.append(ldap_account[field])
 
         # Look for jira account based on various ldap fields by preference
-        jira_account_keys = set()
+        jira_account_usernames = set()
         partial_single_matches = []  # Need order of preference
 
         for query in jira_queries:
@@ -316,29 +316,29 @@ class LDAP2JiraUserMap:
             result_jira_accounts = self.jira_search_user(query)
             single_result = len(result_jira_accounts) == 1
             for jira_account in result_jira_accounts:
-                if jira_account.key in jira_account_keys and not single_result:
+                if jira_account.name in jira_account_usernames and not single_result:
                     continue
 
-                jira_account_keys.add(jira_account.key)
+                jira_account_usernames.add(jira_account.name)
 
                 match = self._ldap_jira_match(ldap_account, jira_account)
                 if match == MATCH:
                     self._update_user(user_dict,
-                                      jira_account.key,
+                                      jira_account.name,
                                       'found',
                                       level=logging.INFO)
-                    user_dict['jira-account'] = jira_account.key
+                    user_dict['jira-account'] = jira_account.name
                     break
 
                 if match == PARTIAL_MATCH and single_result:
-                    if jira_account.key not in partial_single_matches:
-                        partial_single_matches.append(jira_account.key)
+                    if jira_account.name not in partial_single_matches:
+                        partial_single_matches.append(jira_account.name)
 
             # Don't search value from rest of ldap fields
             if 'jira-account' in user_dict:
                 break
 
-        if not jira_account_keys:
+        if not jira_account_usernames:
             self._update_user(user_dict, username, 'missing')
             return user_dict
 
@@ -351,7 +351,7 @@ class LDAP2JiraUserMap:
             user_dict['jira-account'] = partial_single_matches[0]
 
         if 'jira-account' not in user_dict:
-            user_dict['jira-results'] = jira_account_keys
+            user_dict['jira-results'] = jira_account_usernames
 
             self._update_user(
                 user_dict, username, 'ambiguous',
@@ -378,9 +378,9 @@ class LDAP2JiraUserMap:
 
                     not_in_ldap: User name wasn't found in LDAP
 
-                jira-account: JIRA user key
+                jira-account: JIRA user name
 
-                jira-results: A list of JIRA user keys that partially match
+                jira-results: A list of JIRA user names that partially match
 
             Example:
 
