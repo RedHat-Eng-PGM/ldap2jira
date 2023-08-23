@@ -96,6 +96,7 @@ class LDAP2JiraUserMap:
                  jira_user: str = None,
                  jira_password: str = None,
                  jira_auth_token: str = None,
+                 jira_extra_kwargs=None
                  ):
 
         if jira_user or jira_password:
@@ -108,6 +109,7 @@ class LDAP2JiraUserMap:
         self.jira_user = jira_user
         self.jira_password = jira_password
         self.jira_auth_token = jira_auth_token
+        self.jira_extra_kwargs = jira_extra_kwargs or {}
 
         self.ldap_url = ldap_url
         self.ldap_base = ldap_base
@@ -146,7 +148,7 @@ class LDAP2JiraUserMap:
             else:
                 jira_kwargs['token_auth'] = self.jira_auth_token
 
-            self._jira = JIRA(**jira_kwargs)
+            self._jira = JIRA(**jira_kwargs, **self.jira_extra_kwargs)
 
         return self._jira
 
