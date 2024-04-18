@@ -361,11 +361,12 @@ class LDAP2JiraUserMap:
 
         return user_dict
 
-    def find_jira_accounts(self, usernames: List[str]) -> dict:
+    def find_jira_accounts(self, usernames: List[str], max_workers: int = None) -> dict:
         """ Finds matching JIRA account for given user names
 
         Args:
             usernames: List of user names
+            max_workers: The maximum number of threads
 
         Returns:
             A dict with user names as keys and match results dict as values
@@ -404,7 +405,7 @@ class LDAP2JiraUserMap:
 
         self.map.update(self.load_map(self.map_file))
 
-        with ThreadPoolExecutor(thread_name_prefix='W') as executor:
+        with ThreadPoolExecutor(thread_name_prefix='W', max_workers=max_workers) as executor:
 
             f_users_d = {executor.submit(self._process_username, username)
                          for username in usernames}
